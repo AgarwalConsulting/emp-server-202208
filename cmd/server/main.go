@@ -1,79 +1,17 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/gorilla/mux"
 
-	"algogrit.com/emp-server/entities"
-
+	empHTTP "algogrit.com/emp-server/employees/http"
 	"algogrit.com/emp-server/employees/repository"
 	"algogrit.com/emp-server/employees/service"
 )
-
-var empRepo = repository.NewInMem()
-var empV1 = service.NewV1(empRepo)
-
-func EmployeesIndexHandler(w http.ResponseWriter, req *http.Request) {
-	employees, err := empV1.Index()
-
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintln(w, err)
-		return
-	}
-
-	w.Header().Add("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(employees)
-}
-
-func EmployeeCreateHandler(w http.ResponseWriter, req *http.Request) {
-	var newEmployee entities.Employee
-
-	decoder := json.NewDecoder(req.Body)
-	decoder.DisallowUnknownFields()
-
-	err := decoder.Decode(&newEmployee)
-
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintln(w, err)
-		return
-	}
-
-	createdEmp, err := empV1.Create(newEmployee)
-
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintln(w, err)
-		return
-	}
-
-	w.Header().Add("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(createdEmp)
-}
-
-func EmployeeShowHandler(w http.ResponseWriter, req *http.Request) {
-	employeeID := mux.Vars(req)["id"]
-
-	empID, _ := strconv.Atoi(employeeID)
-
-	emp, err := empV1.Show(empID)
-
-	if err != nil {
-		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintln(w, err)
-		return
-	}
-
-	w.Header().Add("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(emp)
-}
 
 func loggingMiddleware(next http.Handler) http.Handler {
 	f := func(w http.ResponseWriter, req *http.Request) {
@@ -90,7 +28,6 @@ func loggingMiddleware(next http.Handler) http.Handler {
 }
 
 func main() {
-	// r := http.NewServeMux()
 	r := mux.NewRouter()
 
 	r.HandleFunc("/hello", func(w http.ResponseWriter, req *http.Request) {
@@ -99,11 +36,11 @@ func main() {
 		fmt.Fprintln(w, msg)
 	})
 
-	// r.HandleFunc("/employees", EmployeesHandler)
-	r.HandleFunc("/employees", EmployeesIndexHandler).Methods("GET")
-	r.HandleFunc("/employees", EmployeeCreateHandler).Methods("POST")
+	var empRepo = repository.NewInMem()
+	var empV1 = service.NewV1(empRepo)
+	var empHandler = empHTTP.New(empV1)
 
-	r.HandleFunc("/employees/{id}", EmployeeShowHandler).Methods("GET")
+	empHandler.SetupRoutes(r)
 
 	log.Println("Starting server on port: 8000...")
 	http.ListenAndServe("localhost:8000", loggingMiddleware(r))
