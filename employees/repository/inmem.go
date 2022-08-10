@@ -2,19 +2,25 @@ package repository
 
 import (
 	"errors"
+	"sync"
 
 	"algogrit.com/emp-server/entities"
 )
 
 type inmem struct {
 	employees []entities.Employee
+	mut       sync.RWMutex
 }
 
 func (repo *inmem) ListAll() ([]entities.Employee, error) {
+	repo.mut.RLock()
+	defer repo.mut.RUnlock()
 	return repo.employees, nil
 }
 
 func (repo *inmem) Save(newEmployee entities.Employee) (*entities.Employee, error) {
+	repo.mut.Lock()
+	defer repo.mut.Unlock()
 	newEmployee.ID = len(repo.employees) + 1
 
 	repo.employees = append(repo.employees, newEmployee)
@@ -23,6 +29,9 @@ func (repo *inmem) Save(newEmployee entities.Employee) (*entities.Employee, erro
 }
 
 func (repo *inmem) FindBy(empID int) (*entities.Employee, error) {
+	repo.mut.RLock()
+	defer repo.mut.RUnlock()
+
 	if empID >= len(repo.employees) {
 		return nil, errors.New("unknown employee")
 	}
