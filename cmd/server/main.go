@@ -11,23 +11,22 @@ import (
 	"github.com/gorilla/mux"
 
 	"algogrit.com/emp-server/entities"
+
+	"algogrit.com/emp-server/employees/repository"
 )
 
-// func (e Employee) MarshalJSON() ([]byte, error) {
-// 	jsonString := fmt.Sprintf(`{"name": "%s", "speciality": "%s", "project": %d}`, e.Name, e.Department, e.ProjectID)
-
-// 	return []byte(jsonString), nil
-// }
-
-var employees = []entities.Employee{
-	{1, "Gaurav", "LnD", 1001},
-	{2, "Jose", "Cloud", 1002},
-	{3, "Prabhakar", "SRE", 10003},
-}
+var empRepo = repository.NewInMem()
 
 func EmployeesIndexHandler(w http.ResponseWriter, req *http.Request) {
-	w.Header().Add("Content-Type", "application/json")
+	employees, err := empRepo.ListAll()
 
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintln(w, err)
+		return
+	}
+
+	w.Header().Add("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(employees)
 }
 
@@ -45,31 +44,30 @@ func EmployeeCreateHandler(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	newEmployee.ID = len(employees) + 1
+	createdEmp, err := empRepo.Save(newEmployee)
 
-	employees = append(employees, newEmployee)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintln(w, err)
+		return
+	}
 
 	w.Header().Add("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(newEmployee)
+	json.NewEncoder(w).Encode(createdEmp)
 }
-
-// func EmployeesHandler(w http.ResponseWriter, req *http.Request) {
-// 	if req.Method == "POST" {
-// 		EmployeeCreateHandler(w, req)
-// 	} else if req.Method == "GET" {
-// 		EmployeesIndexHandler(w, req)
-// 	} else {
-// 		w.WriteHeader(http.StatusMethodNotAllowed)
-// 		return
-// 	}
-// }
 
 func EmployeeShowHandler(w http.ResponseWriter, req *http.Request) {
 	employeeID := mux.Vars(req)["id"]
 
 	empID, _ := strconv.Atoi(employeeID)
 
-	emp := employees[empID-1]
+	emp, err := empRepo.FindBy(empID)
+
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintln(w, err)
+		return
+	}
 
 	w.Header().Add("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(emp)
@@ -79,12 +77,7 @@ func loggingMiddleware(next http.Handler) http.Handler {
 	f := func(w http.ResponseWriter, req *http.Request) {
 		begin := time.Now()
 
-		// if authorized {
 		next.ServeHTTP(w, req)
-		// } else {
-		// 	w.WriteHeader(http.StatusUnauthorized)
-		// 	return
-		// }
 
 		dur := time.Since(begin)
 
